@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Op Art Generator - Bulge Effect</title>
+    <title>Op Art Generator V2 - Fix Masking</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
     <style>
         body {
@@ -13,113 +13,99 @@
             justify-content: center;
             min-height: 100vh;
             margin: 0;
-            background-color: #f0f0f0;
-            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            background-color: #222; /* 배경을 어둡게 해서 캔버스 구분 */
+            color: white;
+            font-family: sans-serif;
         }
         canvas {
-            box-shadow: 0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23);
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
             margin-bottom: 20px;
-            border: 1px solid #000;
+            background: white; /* 캔버스 기본 배경 */
         }
-        .ui-container {
-            text-align: center;
-            background: white;
+        .controls {
+            background: #333;
             padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            text-align: center;
         }
-        p { margin: 0 0 10px 0; color: #333; font-size: 0.9rem;}
-        input[type="file"] { display: block; margin: 0 auto; }
+        input[type="file"] { margin-bottom: 10px; }
+        .status { color: #ffcc00; font-size: 0.9em; margin-top: 5px; }
     </style>
 </head>
 <body>
 
-    <div class="ui-container">
-        <p><b>단색 PNG(실루엣)</b>를 업로드하세요.</p>
-        </div>
+    <div class="controls">
+        <p>이미지(검은 물체/흰 배경 또는 투명 배경)를 업로드하세요.</p>
+        <div id="status-msg" class="status">대기 중...</div>
+    </div>
 
     <script>
         let inputImg;
         let processedImg;
-        
-        // 값 조절 변수 (나중에 슬라이더로 뺄 수 있음)
-        let gridSize = 12;      // 격자 크기 (작을수록 촘촘함)
-        let bulgeStrength = 1.8; // 왜곡 강도 (클수록 더 볼록함)
+        let gridSize = 10;      
+        let bulgeStrength = 1.8; 
 
         function setup() {
-            // 캔버스 생성 (600x600)
             let cnv = createCanvas(600, 600);
-            cnv.parent(document.body); // 캔버스를 body에 붙임 (순서 정렬용)
-            
-            // 안티앨리어싱 끄기 (픽셀 느낌, 선명한 흑백)
-            noSmooth(); 
+            cnv.parent(document.body);
+            noSmooth();
 
-            // 파일 업로드 버튼 생성
             let fileInput = createFileInput(handleFile);
-            
-            // 버튼을 ui-container 안으로 이동 (스타일링을 위해)
-            let container = select('.ui-container');
-            fileInput.parent(container);
+            fileInput.parent(select('.controls'));
 
-            // 초기 안내 문구
+            // 안내 문구
             background(255);
             fill(0);
             textAlign(CENTER, CENTER);
-            textSize(14);
-            text("이미지를 업로드하면\n옵아트 패턴이 생성됩니다.", width/2, height/2);
+            textSize(16);
+            text("여기에 패턴이 나타납니다.", width/2, height/2);
         }
 
         function draw() {
-            // 이미지가 로드되었을 때만 그리기 연산 수행
             if (processedImg) {
-                background(255); // 배경: 흰색
-                
-                // 이미지 픽셀 데이터 로드
+                background(255); // 배경 리셋
+
                 processedImg.loadPixels();
                 
-                // 그리드 루프
+                // 픽셀 스캔 시작
                 for (let y = 0; y < height; y += gridSize) {
                     for (let x = 0; x < width; x += gridSize) {
                         
-                        // 현재 타일의 중심점
                         let cx = x + gridSize / 2;
                         let cy = y + gridSize / 2;
+
+                        // 픽셀 정보 가져오기
+                        // 주의: 고해상도 디스플레이(Retina) 대응을 위해 
+                        // density를 고려하지 않고 단순화했습니다.
+                        let c = processedImg.get(cx, cy);
                         
-                        // 1. 마스킹 체크: 픽셀이 존재하는가?
-                        // 캔버스가 600x600이므로 좌표 그대로 가져옴
-                        let c = processedImg.get(cx, cy); 
-                        let alphaVal = alpha(c); // 투명도 확인
+                        // [핵심 수정 사항]
+                        // 1. 투명도(Alpha)가 충분히 높은가? (투명 배경 PNG 대응)
+                        // 2. 밝기(Brightness)가 충분히 어두운가? (흰 배경 JPG 대응)
+                        // --> 흰색(255)에 가까우면 배경으로 취급하고 무시합니다.
                         
-                        // 투명하지 않은 부분(이미지 영역)만 그리기
-                        if (alphaVal > 128) {
+                        let isVisible = alpha(c) > 50 && brightness(c) < 200;
+
+                        if (isVisible) {
                             
-                            // 2. 왜곡 계산 (Bulge Logic)
-                            // 화면 중앙(width/2, height/2)을 기준으로 거리 계산
+                            // === 여기서부터는 아까와 동일한 왜곡 로직 ===
                             let distFromCenter = dist(cx, cy, width/2, height/2);
-                            let maxDist = width / 1.5; // 왜곡이 미치는 범위 조절
+                            let maxDist = width / 1.5;
                             
-                            // 중심에 가까울수록 1, 멀수록 0
                             let factor = map(distFromCenter, 0, maxDist, 1, 0);
                             factor = constrain(factor, 0, 1);
-                            
-                            // 거듭제곱으로 왜곡을 극대화 (비선형 왜곡)
                             let distortion = pow(factor, bulgeStrength); 
                             
-                            // 3. 그리기 (체크보드 패턴)
-                            fill(0);
-                            noStroke();
+                            let currentSize = gridSize * distortion; 
                             
-                            // 격자 위치 계산 (행, 열)
                             let colIndex = floor(x / gridSize);
                             let rowIndex = floor(y / gridSize);
                             
-                            // 왜곡된 크기 적용
-                            let currentSize = gridSize * distortion; 
+                            fill(0);
+                            noStroke();
                             
-                            // (행+열)이 짝수인 경우에만 검은 사각형 그리기
                             if ((colIndex + rowIndex) % 2 == 0) {
                                 rectMode(CENTER);
-                                // 크기가 너무 작으면 그리지 않음 (깔끔함 유지)
                                 if (currentSize > 0.5) {
                                     rect(cx, cy, currentSize, currentSize);
                                 }
@@ -127,30 +113,52 @@
                         }
                     }
                 }
-                // 한 번만 그리고 멈춤 (CPU 절약)
                 noLoop();
+                select('#status-msg').html("생성 완료!");
             }
         }
 
-        // 파일 처리 함수
         function handleFile(file) {
             if (file.type === 'image') {
-                // 이미지 로드
+                select('#status-msg').html("이미지 처리 중...");
+                
                 inputImg = createImg(file.data, '', () => {
-                    inputImg.hide(); // HTML 원본 이미지는 숨김
+                    inputImg.hide();
                     
-                    // p5 그래픽 버퍼에 이미지 담기 (리사이징)
+                    // 그래픽 버퍼 초기화 (중요: 이전 이미지 잔상 제거)
+                    if (processedImg) processedImg.remove();
                     processedImg = createGraphics(width, height);
                     
-                    // 업로드된 이미지를 캔버스 크기에 맞게 강제로 늘림 (Fit)
-                    // 원본 비율 유지가 필요하면 이 부분을 수정해야 함
-                    processedImg.image(inputImg, 0, 0, width, height);
+                    // 1. 버퍼 배경을 투명하게 클리어
+                    processedImg.clear();
                     
-                    loop(); // draw() 함수 다시 실행
+                    // 2. 이미지를 캔버스 중앙에 '비율 유지하며' 그리기 (Fit)
+                    // 이미지가 찌그러지지 않게 계산
+                    let imgAspect = inputImg.width / inputImg.height;
+                    let canvasAspect = width / height;
+                    let drawW, drawH, drawX, drawY;
+
+                    if (imgAspect > canvasAspect) {
+                        // 이미지가 더 납작함 -> 가로를 맞춤
+                        drawW = width;
+                        drawH = width / imgAspect;
+                        drawX = 0;
+                        drawY = (height - drawH) / 2;
+                    } else {
+                        // 이미지가 더 길쭉함 -> 세로를 맞춤
+                        drawH = height;
+                        drawW = height * imgAspect;
+                        drawX = (width - drawW) / 2;
+                        drawY = 0;
+                    }
+
+                    processedImg.image(inputImg, drawX, drawY, drawW, drawH);
+                    
+                    loop();
                 });
             } else {
                 inputImg = null;
-                alert("이미지 파일만 업로드 가능합니다.");
+                alert("이미지가 아닙니다.");
             }
         }
     </script>
