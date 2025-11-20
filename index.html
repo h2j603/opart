@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Op Art Generator V2 - Fix Masking</title>
+    <title>Op Art Generator V3 - Accurate Masking</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
     <style>
         body {
@@ -13,14 +13,15 @@
             justify-content: center;
             min-height: 100vh;
             margin: 0;
-            background-color: #222; /* 배경을 어둡게 해서 캔버스 구분 */
+            background-color: #222;
             color: white;
             font-family: sans-serif;
+            gap: 20px; /* 요소들 사이 간격 */
         }
         canvas {
             box-shadow: 0 0 20px rgba(0,0,0,0.5);
-            margin-bottom: 20px;
-            background: white; /* 캔버스 기본 배경 */
+            background: #fff; /* 캔버스 기본 배경은 흰색 */
+            border: 1px solid #555;
         }
         .controls {
             background: #333;
@@ -35,60 +36,72 @@
 <body>
 
     <div class="controls">
-        <p>이미지(검은 물체/흰 배경 또는 투명 배경)를 업로드하세요.</p>
+        <p><b>검은색 오브젝트 / 흰색 또는 투명 배경</b>의 PNG/JPG를 업로드하세요.</p>
         <div id="status-msg" class="status">대기 중...</div>
     </div>
 
     <script>
-        let inputImg;
-        let processedImg;
-        let gridSize = 10;      
-        let bulgeStrength = 1.8; 
+        let inputImg; // 사용자가 업로드한 원본 이미지 (p5.Image 객체)
+        let maskGraphics; // 마스킹 픽셀 정보를 담을 그래픽 버퍼
+        
+        // 이미지 그리기 위치와 크기 (캔버스 중앙에 비율 유지)
+        let imgDrawX, imgDrawY, imgDrawW, imgDrawH;
+
+        // 조절 변수
+        let gridSize = 10;      // 격자 크기 (작을수록 촘촘)
+        let bulgeStrength = 1.8; // 왜곡 강도 (클수록 볼록)
 
         function setup() {
             let cnv = createCanvas(600, 600);
             cnv.parent(document.body);
-            noSmooth();
+            noSmooth(); // 픽셀 아트 느낌
 
             let fileInput = createFileInput(handleFile);
             fileInput.parent(select('.controls'));
 
-            // 안내 문구
             background(255);
             fill(0);
             textAlign(CENTER, CENTER);
             textSize(16);
-            text("여기에 패턴이 나타납니다.", width/2, height/2);
+            text("이미지를 업로드하면\n이 안에 옵아트 패턴이 생성됩니다.", width/2, height/2);
+            noLoop(); // 초기에는 그리지 않음
         }
 
         function draw() {
-            if (processedImg) {
-                background(255); // 배경 리셋
-
-                processedImg.loadPixels();
+            background(255); // 캔버스 배경은 항상 흰색
+            
+            if (inputImg && maskGraphics) {
+                // 1. 원본 이미지를 먼저 그림 (마스킹 확인용)
+                // draw() 함수 내에서 p5.Image 객체를 직접 그립니다.
+                image(inputImg, imgDrawX, imgDrawY, imgDrawW, imgDrawH);
                 
-                // 픽셀 스캔 시작
+                maskGraphics.loadPixels(); // 마스크 픽셀 정보 로드
+                
+                // 2. 옵아트 패턴 그리기 (마스크 위에)
                 for (let y = 0; y < height; y += gridSize) {
                     for (let x = 0; x < width; x += gridSize) {
                         
                         let cx = x + gridSize / 2;
                         let cy = y + gridSize / 2;
 
-                        // 픽셀 정보 가져오기
-                        // 주의: 고해상도 디스플레이(Retina) 대응을 위해 
-                        // density를 고려하지 않고 단순화했습니다.
-                        let c = processedImg.get(cx, cy);
+                        // [핵심 수정 부분]
+                        // 마스킹 픽셀은 'maskGraphics'에서 가져와야 함
+                        // 중요한 것은 마스크 그래픽스에 그려진 이미지의 정확한 위치/크기
+                        // 캔버스 좌표(cx, cy)를 마스크 그래픽스의 상대 좌표로 변환
                         
-                        // [핵심 수정 사항]
-                        // 1. 투명도(Alpha)가 충분히 높은가? (투명 배경 PNG 대응)
-                        // 2. 밝기(Brightness)가 충분히 어두운가? (흰 배경 JPG 대응)
-                        // --> 흰색(255)에 가까우면 배경으로 취급하고 무시합니다.
+                        // 마스크 그래픽스 내의 상대 좌표
+                        let maskX = floor(map(cx, 0, width, 0, maskGraphics.width));
+                        let maskY = floor(map(cy, 0, height, 0, maskGraphics.height));
                         
-                        let isVisible = alpha(c) > 50 && brightness(c) < 200;
+                        // 마스크 그래픽스에서 픽셀 색상 가져오기
+                        // get() 함수는 캔버스/그래픽스 객체에 대해 사용 가능
+                        let c = maskGraphics.get(maskX, maskY);
+                        
+                        // 투명도와 밝기로 마스킹 판단 (어둡고 투명하지 않은 부분만)
+                        let isMaskedArea = alpha(c) > 50 && brightness(c) < 200;
 
-                        if (isVisible) {
-                            
-                            // === 여기서부터는 아까와 동일한 왜곡 로직 ===
+                        if (isMaskedArea) {
+                            // === 왜곡 로직 (이전과 동일) ===
                             let distFromCenter = dist(cx, cy, width/2, height/2);
                             let maxDist = width / 1.5;
                             
@@ -101,12 +114,12 @@
                             let colIndex = floor(x / gridSize);
                             let rowIndex = floor(y / gridSize);
                             
-                            fill(0);
+                            fill(0); // 검은색 사각형
                             noStroke();
                             
                             if ((colIndex + rowIndex) % 2 == 0) {
                                 rectMode(CENTER);
-                                if (currentSize > 0.5) {
+                                if (currentSize > 0.5) { // 너무 작은 사각형은 그리지 않음
                                     rect(cx, cy, currentSize, currentSize);
                                 }
                             }
@@ -122,43 +135,44 @@
             if (file.type === 'image') {
                 select('#status-msg').html("이미지 처리 중...");
                 
-                inputImg = createImg(file.data, '', () => {
-                    inputImg.hide();
+                loadImage(file.data, (img) => { // loadImage를 사용하여 p5.Image 생성
+                    inputImg = img;
                     
-                    // 그래픽 버퍼 초기화 (중요: 이전 이미지 잔상 제거)
-                    if (processedImg) processedImg.remove();
-                    processedImg = createGraphics(width, height);
+                    // [핵심 수정 부분]
+                    // maskGraphics 버퍼 초기화 및 이미지 그리기
+                    // 캔버스 크기로 마스크 버퍼를 생성하여 정확한 픽셀 매핑을 위함
+                    if (maskGraphics) maskGraphics.remove();
+                    maskGraphics = createGraphics(width, height); // 캔버스 크기와 동일하게 생성
+                    maskGraphics.clear(); // 투명하게 초기화
                     
-                    // 1. 버퍼 배경을 투명하게 클리어
-                    processedImg.clear();
-                    
-                    // 2. 이미지를 캔버스 중앙에 '비율 유지하며' 그리기 (Fit)
-                    // 이미지가 찌그러지지 않게 계산
+                    // 원본 이미지를 마스크 그래픽스에 그릴 위치와 크기 계산 (비율 유지)
                     let imgAspect = inputImg.width / inputImg.height;
                     let canvasAspect = width / height;
-                    let drawW, drawH, drawX, drawY;
 
                     if (imgAspect > canvasAspect) {
-                        // 이미지가 더 납작함 -> 가로를 맞춤
-                        drawW = width;
-                        drawH = width / imgAspect;
-                        drawX = 0;
-                        drawY = (height - drawH) / 2;
+                        imgDrawW = width;
+                        imgDrawH = width / imgAspect;
+                        imgDrawX = 0;
+                        imgDrawY = (height - imgDrawH) / 2;
                     } else {
-                        // 이미지가 더 길쭉함 -> 세로를 맞춤
-                        drawH = height;
-                        drawW = height * imgAspect;
-                        drawX = (width - drawW) / 2;
-                        drawY = 0;
+                        imgDrawH = height;
+                        imgDrawW = height * imgAspect;
+                        imgDrawX = (width - imgDrawW) / 2;
+                        imgDrawY = 0;
                     }
-
-                    processedImg.image(inputImg, drawX, drawY, drawW, drawH);
+                    // 계산된 크기로 maskGraphics에 이미지를 그립니다.
+                    maskGraphics.image(inputImg, imgDrawX, imgDrawY, imgDrawW, imgDrawH);
                     
-                    loop();
+                    loop(); // draw() 함수 다시 실행하여 업데이트
                 });
             } else {
                 inputImg = null;
-                alert("이미지가 아닙니다.");
+                maskGraphics = null;
+                select('#status-msg').html("이미지 파일만 업로드 가능합니다.");
+                background(255); // 캔버스 초기화
+                fill(0);
+                text("이미지 파일만 업로드 가능합니다.", width/2, height/2);
+                noLoop();
             }
         }
     </script>
