@@ -20,15 +20,16 @@
             padding: 2rem;
             border-radius: 20px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            max-width: 80%;
+            max-width: 90%;
+            width: 400px;
         }
         #word-display {
-            font-size: 2rem;
+            font-size: 2.5rem;
             font-weight: bold;
             margin: 20px 0;
             min-height: 60px;
             color: #333;
-            word-break: break-all; /* 에러 메시지 길 때 줄바꿈 */
+            word-break: keep-all;
         }
         button {
             padding: 15px 30px;
@@ -39,74 +40,67 @@
             border: none;
             border-radius: 50px;
         }
-        button:disabled { background-color: #ccc; }
+        button:disabled { background-color: #ccc; cursor: wait; }
     </style>
 </head>
 <body>
 
     <div class="container">
         <h1>오늘의 랜덤 단어</h1>
-        <div id="word-display">Ready?</div>
+        <div id="word-display">준비 완료!</div>
         <button id="generate-btn">단어 뽑기</button>
     </div>
 
-    <script type="importmap">
-      {
-        "imports": {
-          "@google/generative-ai": "https://esm.run/@google/generative-ai"
-        }
-      }
-    </script>
+    <script>
+        // 👇 여기에 아까 발급받은 '새 API 키'를 넣으세요
+        const API_KEY = "AIzaSyD9Ad0Ba0rOMlEPfbbMboEQhbWy65JPi68"; 
 
-    <script type="module">
-      import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+        const btn = document.getElementById('generate-btn');
+        const display = document.getElementById('word-display');
 
-      // 👇 여기에 본인의 API 키를 정확히 넣어주세요! (따옴표 지우지 마세요)
-      const API_KEY = "AIzaSyD9Ad0Ba0rOMlEPfbbMboEQhbWy65JPi68"; 
+        btn.addEventListener('click', async () => {
+            display.innerText = "생성 중...";
+            btn.disabled = true;
 
-      const genAI = new GoogleGenerativeAI(API_KEY);
-      
-      // 안전 설정: 필터를 끄는 설정 (BLOCK_NONE)
-      const safetySettings = [
-        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-      ];
+            // 라이브러리 대신 직접 주소로 요청을 보냅니다 (이게 더 확실합니다)
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
 
-      const model = genAI.getGenerativeModel({ 
-          model: "gemini-1.5-flash",
-          safetySettings: safetySettings
-      });
+            const data = {
+                contents: [{
+                    parts: [{
+                        text: "한국어 명사 1개를 아주 랜덤하게 추천해줘. 부가적인 설명이나 기호 없이 딱 '단어'만 출력해."
+                    }]
+                }]
+            };
 
-      const btn = document.getElementById('generate-btn');
-      const display = document.getElementById('word-display');
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
 
-      btn.addEventListener('click', async () => {
-          display.innerText = "생성 중...";
-          btn.disabled = true;
+                const json = await response.json();
 
-          try {
-              if (API_KEY.includes("여기에")) {
-                  throw new Error("API 키를 입력하지 않았습니다!");
-              }
+                // 에러가 있다면 내용을 보여줍니다
+                if (json.error) {
+                    throw new Error(json.error.message);
+                }
 
-              const prompt = "한국어 명사 1개를 아주 랜덤하게 추천해줘. 부가적인 설명 없이 딱 '단어'만 출력해.";
-              const result = await model.generateContent(prompt);
-              const response = await result.response;
-              const text = response.text();
-              
-              display.innerText = text;
-          } catch (error) {
-              console.error(error);
-              // 👇 이제 화면에 구체적인 에러 내용을 보여줍니다
-              display.innerText = "오류: " + error.message; 
-              display.style.fontSize = "1rem"; // 에러 메시지는 작게
-              display.style.color = "red";
-          } finally {
-              btn.disabled = false;
-          }
-      });
+                // 결과 텍스트 추출
+                const text = json.candidates[0].content.parts[0].text;
+                display.innerText = text;
+
+            } catch (error) {
+                console.error(error);
+                display.innerText = "오류 발생 ㅠㅠ";
+                alert("에러 내용: " + error.message);
+            } finally {
+                btn.disabled = false;
+            }
+        });
     </script>
 </body>
 </html>
