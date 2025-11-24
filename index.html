@@ -3,33 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Op Art Generator V5 - Threshold Logic</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+    <title>랜덤 명사 생성기</title>
     <style>
+        /* 디자인은 그대로 유지 */
         body {
             display: flex;
-            flex-direction: column;
-            align-items: center;
             justify-content: center;
-            min-height: 100vh;
-            margin: 0;
-            background-color: #1a1a1a;
-            color: #eee;
-            font-family: 'Pretendard', sans-serif;
-        }
-        canvas {
-            border: 1px solid #333;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-            background: #ffffff; /* 캔버스 배경 필수 */
-        }
-        .controls {
-            margin-top: 15px;
-            background: #333;
-            padding: 15px 25px;
-            border-radius: 30px;
-            display: flex;
-            gap: 20px;
             align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f2f5;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         }
-        label { cursor: pointer; user-select: none; }
-        input[type="checkbox"] { transform
+        .container {
+            text-align: center;
+            background: white;
+            padding: 2rem 4rem;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        #word-display {
+            font-size: 3rem;
+            font-weight: bold;
+            margin: 20px 0;
+            min-height: 60px;
+            color: #333;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 50px;
+            transition: transform 0.1s;
+        }
+        button:active { transform: scale(0.95); }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>오늘의 랜덤 단어</h1>
+        <div id="word-display">Ready?</div>
+        <button id="generate-btn">단어 뽑기</button>
+    </div>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "@google/generative-ai": "https://esm.run/@google/generative-ai"
+        }
+      }
+    </script>
+
+    <script type="module">
+      import { GoogleGenerativeAI } from "@google/generative-ai";
+
+      // ⚠️ 주의: 깃허브 같은 공개된 곳에 API 키를 올리면 남들이 볼 수 있습니다.
+      // 연습용으로만 쓰시고, 나중에 키를 삭제하거나 재발급 받으세요.
+          const API_KEY = "AIzaSyBeMIolFVibYdzmaOH1ReMNCIXrFz9KwpM"; 
+      
+      const genAI = new GoogleGenerativeAI(API_KEY);
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+      const btn = document.getElementById('generate-btn');
+      const display = document.getElementById('word-display');
+
+      btn.addEventListener('click', async () => {
+          display.innerText = "생성 중...";
+          btn.disabled = true;
+
+          try {
+              const prompt = "한국어 명사 1개를 아주 랜덤하게 추천해줘. 부가적인 설명이나 기호 없이 딱 '단어'만 출력해.";
+              const result = await model.generateContent(prompt);
+              const response = await result.response;
+              const text = response.text();
+              
+              display.innerText = text;
+          } catch (error) {
+              console.error(error);
+              display.innerText = "에러 발생!";
+          } finally {
+              btn.disabled = false;
+          }
+      });
+    </script>
+</body>
+</html>
